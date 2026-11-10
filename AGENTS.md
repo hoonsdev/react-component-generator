@@ -18,6 +18,14 @@
 - `/api/config`는 키 존재 여부(boolean)만 반환한다. 키 값을 클라이언트로 내려보내지 않는다 (`server/index.ts:147-156`).
 - Gemini 호출은 API 키가 URL 쿼리에 포함된다 (`server/index.ts:99`). 요청 URL을 로그나 에러 메시지에 포함하지 않는다 (현재 에러는 status 코드만 노출: `server/index.ts:112`).
 
+### 민감 파일 차단
+
+- 에이전트는 민감 파일을 읽거나 수정하지 않는다. 대상: `.env`, `.env.*`, `*.env`, `*credential*`, `*secret*`, `*.ini`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `.npmrc`, `.netrc`, `.aws/`, `.ssh/`.
+- `.claude/settings.json`의 `permissions.deny`가 Read/Edit와 Bash/PowerShell의 주요 우회 명령(`cat`, `type`, `Get-Content`, `grep`, `cp`, `rm` 등)을 차단한다. 이 정책을 완화하거나 삭제하지 않는다.
+- 차단된 파일이 필요해 보이면 우회(다른 명령, 스크립트, 심볼릭 링크 등)하지 말고 사용자에게 필요한 값이나 변경을 직접 요청한다.
+- 새 유형의 민감 파일이 생기면 `permissions.deny`와 이 목록을 함께 갱신한다.
+- `permissions.deny`는 명령 패턴 매칭이라 완전한 차단이 아니다. 키 노출 방지의 기본 방어선은 `.gitignore`의 `.env`와 위 Immutable 규칙이다.
+
 ### Do's & Don'ts
 
 - Do: 포트 3002는 두 곳에 하드코딩되어 있다. 변경 시 함께 수정한다 (`server/index.ts:139`, `vite.config.ts:11`).

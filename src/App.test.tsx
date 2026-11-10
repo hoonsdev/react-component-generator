@@ -17,7 +17,18 @@ function mockFetch(generate: () => Response | Promise<Response>) {
   return fn;
 }
 
-const ok = () => new Response(JSON.stringify({ code: 'render(<div>ok</div>)' }));
+const enc = new TextEncoder();
+const line = (event: object) => enc.encode(`${JSON.stringify(event)}\n`);
+const ok = () =>
+  new Response(
+    new ReadableStream({
+      start(c) {
+        c.enqueue(line({ type: 'delta', text: 'render(<div>ok</div>)' }));
+        c.enqueue(line({ type: 'done', code: 'render(<div>ok</div>)' }));
+        c.close();
+      },
+    }),
+  );
 const fail = () => new Response(JSON.stringify({ error: '실패' }), { status: 500 });
 
 function seedKey(provider: string, key: string) {
@@ -89,6 +100,69 @@ describe('App 영속화', () => {
     await user.click(screen.getByRole('button', { name: '컴포넌트 생성' }));
 
     await screen.findByText('실패');
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.history)!)).toEqual([]);
+  });
+});
+
+describe('App 스트리밍', () => {
+  async function startGenerate(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByRole('textbox', { name: '' }), '스트림 프롬프트');
+    await user.click(screen.getByRole('button', { name: '컴포넌트 생성' }));
+  }
+
+  it('생성 중에는 코드 탭에 받은 코드를 실시간으로 보여주고, 완료되면 미리보기 탭으로 전환한다', async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    mockFetch(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              controller = c;
+            },
+          }),
+        ),
+    );
+    seedKey('google', 'AIza-key');
+    const user = userEvent.setup();
+    render(<App />);
+
+    await startGenerate(user);
+    await waitFor(() => expect(controller).toBeDefined());
+    controller.enqueue(line({ type: 'delta', text: 'const Live' }));
+
+    expect(await screen.findByText('const Live')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '코드' })).toHaveClass('tab--active');
+
+    controller.enqueue(line({ type: 'done', code: 'const Live = () => null;\nrender(<Live />);' }));
+    controller.close();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '미리보기' })).toHaveClass('tab--active'),
+    );
+    expect(document.querySelectorAll('.card-prompt')).toHaveLength(1);
+  });
+
+  it('스트림 중간에 error 이벤트가 오면 에러를 표시하고 목록에 추가하지 않는다', async () => {
+    mockFetch(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.enqueue(line({ type: 'delta', text: 'const A' }));
+              c.enqueue(line({ type: 'error', error: '중간 실패' }));
+              c.close();
+            },
+          }),
+        ),
+    );
+    seedKey('google', 'AIza-key');
+    const user = userEvent.setup();
+    render(<App />);
+
+    await startGenerate(user);
+
+    await screen.findByText('중간 실패');
+    expect(document.querySelectorAll('.card-prompt')).toHaveLength(0);
     expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.history)!)).toEqual([]);
   });
 });

@@ -37,8 +37,10 @@ function App() {
     anthropic: false,
     google: false,
   });
-  const { components, isLoading, error, generate, removeComponent, clearAll } =
+  const { components, streaming, isLoading, error, generate, removeComponent, clearAll } =
     useComponentGenerator();
+  // 생성 중인 카드는 목록 맨 앞에 두고, 완료 후에도 같은 id로 이어져 탭 전환이 자연스럽다.
+  const visibleComponents = streaming ? [streaming, ...components] : components;
 
   useEffect(() => {
     fetch('/api/config')
@@ -153,10 +155,10 @@ function App() {
       )}
 
       <section className="results-section">
-        {components.length > 0 && (
+        {visibleComponents.length > 0 && (
           <div className="results-header">
             <h2>생성된 컴포넌트</h2>
-            <button className="btn-clear" onClick={clearAll}>
+            <button className="btn-clear" onClick={clearAll} disabled={isLoading}>
               전체 삭제
             </button>
           </div>
@@ -183,23 +185,24 @@ function App() {
           </div>
         )}
 
-        {isLoading && (
+        {isLoading && !streaming && (
           <div className="win loading-card" role="status">
             <div className="win-body">
-              <p>컴포넌트를 생성하고 있습니다...</p>
+              <p>AI 응답을 기다리고 있습니다...</p>
               <div className="loading-bar" />
             </div>
           </div>
         )}
 
         <div className="results-grid">
-          {components.map((component) => (
+          {visibleComponents.map((component) => (
             <ComponentCard
               key={component.id}
               component={component}
               onRemove={removeComponent}
               onRegenerate={handleGenerate}
               isLoading={isLoading}
+              isStreaming={component.id === streaming?.id}
             />
           ))}
         </div>

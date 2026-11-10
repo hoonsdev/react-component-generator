@@ -268,6 +268,18 @@
   color: #6b6b6b;
 }
 
+.prompt-counter {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: right;
+}
+
+.prompt-counter-over {
+  color: var(--tomato);
+  font-weight: 700;
+}
+
 .prompt-error {
   margin-top: 10px;
   color: var(--tomato);
@@ -561,6 +573,23 @@
   font-family: var(--font-code);
   font-size: 14px;
   line-height: 1.75;
+}
+
+.code-block--streaming {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.code-block--streaming code::after {
+  content: '▋';
+  margin-left: 2px;
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 /* ── 반응형 ─────────────────────────────── */
