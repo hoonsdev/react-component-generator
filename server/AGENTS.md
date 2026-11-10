@@ -13,7 +13,8 @@ Bun 기반 AI 프록시 서버. `/api/generate`가 Anthropic/Gemini를 호출하
 ## Implementation Patterns
 
 - `/api/generate`는 NDJSON 스트림(`delta`/`done`/`error` 이벤트, `server/stream.ts`)으로 응답한다. 스트림 시작 전 오류(키 누락, 프로바이더 HTTP 오류)만 일반 JSON + status로 응답하고, 시작 후 오류는 `error` 이벤트로 보낸다. 클라이언트 파서는 `src/utils/ndjson.ts`이며 이벤트 타입이 양쪽에 있으므로 함께 수정한다.
-- 프로바이더 호출 함수(`openAnthropicStream`, `openGoogleStream`)는 텍스트 조각의 `AsyncGenerator<string>`을 반환한다. 후처리는 `streamToResponse`에서 전체 텍스트에 `ensureRenderCall(stripCodeFences(text))`를 적용해 `done` 이벤트로 보낸다.
+- 프로바이더 호출 함수(`openAnthropicStream`, `openGoogleStream`)는 텍스트 조각의 `AsyncGenerator<string>`을 반환한다. 후처리는 `server/stream.ts`의 `streamToResponse`에서 전체 텍스트에 `ensureRenderCall(stripCodeFences(text))`를 적용해 `done` 이벤트로 보낸다. `streamToResponse`와 `mapError`는 `stream.ts`에 있어 테스트 가능하다(`index.ts`는 import하면 서버가 뜬다).
+- 업스트림 fetch에는 요청별 `AbortController`의 signal을 넘기고, 클라이언트가 끊으면(`streamToResponse`의 `onCancel`) abort한다. `iterateSSE`는 finally에서 `reader.cancel()`로 연결을 닫는다. 이 중단 경로를 제거하지 않는다.
 - 모델 폴백은 `withModelFallback(models, attempt)`로 감싼다. 스트림이 열리기 전(연결/HTTP 오류)에만 동작하며, 텍스트가 나가기 시작한 뒤의 오류나 MAX_TOKENS는 폴백하지 않는다. 우선순위는 `GOOGLE_MODELS` 배열 순서.
 - 순수 함수는 `generator.ts`/`fallback.ts`에 추가하고 같은 폴더에 `*.test.ts`를 둔다.
 

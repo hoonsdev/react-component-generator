@@ -1,5 +1,6 @@
-// 프로바이더 스트리밍 응답(SSE)을 파싱하고 클라이언트로 보낼 NDJSON 이벤트를 만드는 순수 함수들.
+// 프로바이더 스트리밍 응답(SSE)을 파싱하고 클라이언트로 보낼 NDJSON 응답을 만드는 모듈.
 // 부수효과(Bun.serve 등)가 없어 단위 테스트가 가능하다.
+import { stripCodeFences, ensureRenderCall } from './generator';
 
 export type StreamEvent =
   | { type: 'delta'; text: string }
@@ -28,18 +29,23 @@ export async function* iterateSSE(body: ReadableStream<Uint8Array>): AsyncGenera
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parsed = parseSSE(buffer);
-    buffer = parsed.rest;
-    yield* parsed.data;
-  }
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = parseSSE(buffer);
+      buffer = parsed.rest;
+      yield* parsed.data;
+    }
 
-  // 마지막 이벤트가 빈 줄 없이 끝난 경우도 놓치지 않는다.
-  buffer += decoder.decode();
-  yield* parseSSE(`${buffer}\n\n`).data;
+    // 마지막 이벤트가 빈 줄 없이 끝난 경우도 놓치지 않는다.
+    buffer += decoder.decode();
+    yield* parseSSE(`${buffer}\n\n`).data;
+  } finally {
+    // 소비자가 중간에 중단하거나 에러가 나면 업스트림 연결을 닫는다.
+    await reader.cancel().catch(() => {});
+  }
 }
 
 const TRUNCATED_MESSAGE = '생성된 코드가 너무 길어 잘렸습니다. 더 간단한 컴포넌트를 요청해주세요.';
@@ -73,6 +79,74 @@ export function geminiDelta(data: string): string {
     throw new Error(TRUNCATED_MESSAGE);
   }
   return candidate?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
+}
+
+/** 프로바이더 에러를 사용자용 메시지와 HTTP status로 매핑한다. */
+export function mapError(err: unknown): { error: string; status: number } {
+  const message = err instanceof Error ? err.message : 'Unknown error';
+
+  if (message.includes('503')) {
+    return { error: 'API 서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.', status: 503 };
+  }
+  if (message.includes('429')) {
+    return { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.', status: 429 };
+  }
+  return { error: message, status: 500 };
+}
+
+/**
+ * 텍스트 조각을 NDJSON 이벤트로 흘려보내고, 끝나면 정규화된 최종 코드를 done으로 보낸다.
+ * 클라이언트가 끊으면 제너레이터를 중단하고 onCancel(예: 업스트림 fetch abort)을 호출한다.
+ */
+export function streamToResponse(
+  deltas: AsyncGenerator<string>,
+  headers: Record<string, string>,
+  onCancel?: () => void,
+): Response {
+  const encoder = new TextEncoder();
+
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      // 클라이언트가 먼저 끊으면 enqueue/close가 던지므로 삼킨다.
+      const send = (event: StreamEvent) => {
+        try {
+          controller.enqueue(encoder.encode(encodeEvent(event)));
+        } catch {
+          /* 연결 종료 */
+        }
+      };
+      let full = '';
+      try {
+        for await (const text of deltas) {
+          full += text;
+          send({ type: 'delta', text });
+        }
+        const code = ensureRenderCall(stripCodeFences(full));
+        if (!code) throw new Error('모델이 빈 응답을 반환했습니다. 다시 시도해주세요.');
+        send({ type: 'done', code });
+      } catch (err) {
+        send({ type: 'error', error: mapError(err).error });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          /* 이미 닫힘 */
+        }
+      }
+    },
+    cancel() {
+      onCancel?.();
+      void deltas.return(undefined);
+    },
+  });
+
+  return new Response(body, {
+    headers: {
+      ...headers,
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache',
+    },
+  });
 }
 
 /** 클라이언트로 보낼 NDJSON 한 줄. */

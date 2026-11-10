@@ -1,6 +1,5 @@
-import { stripCodeFences, ensureRenderCall } from './generator';
 import { withModelFallback } from './fallback';
-import { iterateSSE, anthropicDelta, geminiDelta, encodeEvent, type StreamEvent } from './stream';
+import { iterateSSE, anthropicDelta, geminiDelta, mapError, streamToResponse } from './stream';
 
 // 우선순위 순서. 앞 모델이 실패하면 다음 모델로 폴백한다.
 const GOOGLE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash'];
@@ -68,9 +67,14 @@ function resolveApiKey(provider: Provider, clientKey?: string): string | null {
 
 // 프로바이더 호출 함수는 모델 응답을 텍스트 조각(delta)의 비동기 스트림으로 돌려준다.
 // HTTP 오류는 스트림이 시작되기 전에 throw 하므로 핸들러가 일반 JSON 에러로 응답할 수 있다.
-async function openAnthropicStream(prompt: string, apiKey: string): Promise<AsyncGenerator<string>> {
+async function openAnthropicStream(
+  prompt: string,
+  apiKey: string,
+  signal: AbortSignal,
+): Promise<AsyncGenerator<string>> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
@@ -102,11 +106,13 @@ async function openGoogleModelStream(
   prompt: string,
   apiKey: string,
   model: string,
+  signal: AbortSignal,
 ): Promise<AsyncGenerator<string>> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -129,69 +135,14 @@ async function openGoogleModelStream(
 }
 
 // 폴백은 스트림이 열리기 전(연결/HTTP 오류)에만 동작한다. 텍스트가 나가기 시작하면 모델을 바꾸지 않는다.
-async function openGoogleStream(prompt: string, apiKey: string): Promise<AsyncGenerator<string>> {
-  return withModelFallback(GOOGLE_MODELS, (model) => openGoogleModelStream(prompt, apiKey, model));
-}
-
-/** 프로바이더 에러를 사용자용 메시지와 HTTP status로 매핑한다. */
-function mapError(err: unknown): { error: string; status: number } {
-  const message = err instanceof Error ? err.message : 'Unknown error';
-
-  if (message.includes('503')) {
-    return { error: 'API 서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.', status: 503 };
-  }
-  if (message.includes('429')) {
-    return { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.', status: 429 };
-  }
-  return { error: message, status: 500 };
-}
-
-/** 텍스트 조각을 NDJSON 이벤트로 흘려보내고, 끝나면 정규화된 최종 코드를 done으로 보낸다. */
-function streamToResponse(deltas: AsyncGenerator<string>): Response {
-  const encoder = new TextEncoder();
-
-  const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // 클라이언트가 먼저 끊으면 enqueue/close가 던지므로 삼킨다.
-      const send = (event: StreamEvent) => {
-        try {
-          controller.enqueue(encoder.encode(encodeEvent(event)));
-        } catch {
-          /* 연결 종료 */
-        }
-      };
-      let full = '';
-      try {
-        for await (const text of deltas) {
-          full += text;
-          send({ type: 'delta', text });
-        }
-        const code = ensureRenderCall(stripCodeFences(full));
-        if (!code) throw new Error('모델이 빈 응답을 반환했습니다. 다시 시도해주세요.');
-        send({ type: 'done', code });
-      } catch (err) {
-        send({ type: 'error', error: mapError(err).error });
-      } finally {
-        try {
-          controller.close();
-        } catch {
-          /* 이미 닫힘 */
-        }
-      }
-    },
-    // 클라이언트가 끊기면 업스트림 읽기를 중단해 토큰 낭비를 막는다.
-    cancel() {
-      void deltas.return(undefined);
-    },
-  });
-
-  return new Response(body, {
-    headers: {
-      ...CORS_HEADERS,
-      'Content-Type': 'application/x-ndjson; charset=utf-8',
-      'Cache-Control': 'no-cache',
-    },
-  });
+async function openGoogleStream(
+  prompt: string,
+  apiKey: string,
+  signal: AbortSignal,
+): Promise<AsyncGenerator<string>> {
+  return withModelFallback(GOOGLE_MODELS, (model) =>
+    openGoogleModelStream(prompt, apiKey, model, signal),
+  );
 }
 
 const server = Bun.serve({
@@ -240,12 +191,14 @@ const server = Bun.serve({
           );
         }
 
+        // 클라이언트가 끊으면 업스트림 요청도 abort해 토큰 소모를 멈춘다.
+        const upstream = new AbortController();
         const deltas =
           provider === 'google'
-            ? await openGoogleStream(prompt, resolvedKey)
-            : await openAnthropicStream(prompt, resolvedKey);
+            ? await openGoogleStream(prompt, resolvedKey, upstream.signal)
+            : await openAnthropicStream(prompt, resolvedKey, upstream.signal);
 
-        return streamToResponse(deltas);
+        return streamToResponse(deltas, CORS_HEADERS, () => upstream.abort());
       } catch (err) {
         const { error, status } = mapError(err);
         return Response.json({ error }, { status, headers: CORS_HEADERS });

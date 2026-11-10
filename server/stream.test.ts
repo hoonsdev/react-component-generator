@@ -1,11 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parseSSE,
   anthropicDelta,
   geminiDelta,
   encodeEvent,
   iterateSSE,
+  mapError,
+  streamToResponse,
 } from './stream';
+
+async function* fromArray(items: string[]): AsyncGenerator<string> {
+  for (const item of items) yield item;
+}
+
+async function readEvents(res: Response) {
+  const text = await res.text();
+  return text
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
 
 describe('parseSSE', () => {
   it('빈 줄로 끝난 이벤트의 data를 추출한다', () => {
@@ -90,5 +104,95 @@ describe('iterateSSE', () => {
     const out: string[] = [];
     for await (const d of iterateSSE(body)) out.push(d);
     expect(out).toEqual(['one', 'last']);
+  });
+
+  it('소비자가 중간에 중단하면 업스트림 body를 취소한다', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('data: one\n\n'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+
+    for await (const d of iterateSSE(body)) {
+      expect(d).toBe('one');
+      break;
+    }
+
+    expect(cancelled).toBe(true);
+  });
+});
+
+describe('mapError', () => {
+  it('503이 포함된 메시지는 과부하 안내와 503으로 매핑한다', () => {
+    expect(mapError(new Error('Gemini API error: 503'))).toEqual({
+      error: 'API 서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.',
+      status: 503,
+    });
+  });
+
+  it('429가 포함된 메시지는 요청 과다 안내와 429로 매핑한다', () => {
+    expect(mapError(new Error('Claude API error: 429')).status).toBe(429);
+  });
+
+  it('그 외 에러는 메시지를 그대로 두고 500으로 매핑한다', () => {
+    expect(mapError(new Error('boom'))).toEqual({ error: 'boom', status: 500 });
+  });
+});
+
+describe('streamToResponse', () => {
+  const headers = { 'X-Test': '1' };
+
+  it('텍스트 조각을 delta로 보내고 끝에 정규화된 코드를 done으로 보낸다', async () => {
+    const res = streamToResponse(fromArray(['const Card = () => null;']), headers);
+    expect(await readEvents(res)).toEqual([
+      { type: 'delta', text: 'const Card = () => null;' },
+      { type: 'done', code: 'const Card = () => null;\n\nrender(<Card />);' },
+    ]);
+  });
+
+  it('전달받은 헤더와 NDJSON Content-Type을 응답에 붙인다', () => {
+    const res = streamToResponse(fromArray(['x']), headers);
+    expect(res.headers.get('X-Test')).toBe('1');
+    expect(res.headers.get('Content-Type')).toContain('application/x-ndjson');
+  });
+
+  it('빈 응답이면 error 이벤트를 보낸다', async () => {
+    const events = await readEvents(streamToResponse(fromArray([]), headers));
+    expect(events).toEqual([{ type: 'error', error: '모델이 빈 응답을 반환했습니다. 다시 시도해주세요.' }]);
+  });
+
+  it('중간에 에러가 나면 받은 delta 뒤에 error 이벤트를 보낸다', async () => {
+    async function* failing(): AsyncGenerator<string> {
+      yield 'const A';
+      throw new Error('Claude API error: 429');
+    }
+    const events = await readEvents(streamToResponse(failing(), headers));
+    expect(events[0]).toEqual({ type: 'delta', text: 'const A' });
+    expect(events[1]).toEqual({ type: 'error', error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' });
+  });
+
+  it('클라이언트가 끊으면 onCancel을 호출하고 제너레이터를 중단한다', async () => {
+    let finished = false;
+    async function* endless(): AsyncGenerator<string> {
+      try {
+        while (true) {
+          yield 'x';
+          await new Promise((r) => setTimeout(r, 5));
+        }
+      } finally {
+        finished = true;
+      }
+    }
+    const onCancel = vi.fn();
+    const res = streamToResponse(endless(), headers, onCancel);
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await vi.waitFor(() => expect(finished).toBe(true));
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });
