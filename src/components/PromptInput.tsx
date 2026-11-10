@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { validatePrompt } from '../utils/validatePrompt';
+import { MAX_PROMPT_LENGTH, validatePrompt } from '../utils/validatePrompt';
 
 interface PromptInputProps {
   onGenerate: (prompt: string) => void;
@@ -19,6 +19,7 @@ const EXAMPLES = [
 export function PromptInput({ onGenerate, isLoading, history = [] }: PromptInputProps) {
   const [prompt, setPrompt] = useState('');
   const validation = validatePrompt(prompt);
+  const promptLength = prompt.trim().length;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +62,9 @@ export function PromptInput({ onGenerate, isLoading, history = [] }: PromptInput
           )}
         </button>
       </form>
+      <p className={`prompt-counter${validation.valid ? '' : ' prompt-counter-over'}`}>
+        {promptLength}/{MAX_PROMPT_LENGTH}
+      </p>
       {validation.error && (
         <p className="prompt-error" role="alert">
           {validation.error}

@@ -51,6 +51,36 @@ describe('PromptInput', () => {
     expect(onGenerate).not.toHaveBeenCalled();
   });
 
+  it('비어 있으면 글자 수 카운터가 0/500으로 표시된다', () => {
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} />);
+    expect(screen.getByText('0/500')).toBeInTheDocument();
+  });
+
+  it('입력하면 글자 수 카운터가 입력 길이만큼 갱신된다', async () => {
+    const user = userEvent.setup();
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} />);
+
+    await user.type(screen.getByRole('textbox'), '프로필 카드');
+
+    expect(screen.getByText('6/500')).toBeInTheDocument();
+  });
+
+  it('앞뒤 공백은 글자 수 카운터에 포함하지 않는다', () => {
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  카드  ' } });
+
+    expect(screen.getByText('2/500')).toBeInTheDocument();
+  });
+
+  it('500자를 넘기면 글자 수 카운터가 초과 상태로 표시된다', () => {
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'a'.repeat(501) } });
+
+    expect(screen.getByText('501/500')).toHaveClass('prompt-counter-over');
+  });
+
   it('히스토리 항목을 클릭하면 입력창에 해당 프롬프트가 채워진다', async () => {
     const user = userEvent.setup();
     render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={['이전 프롬프트']} />);

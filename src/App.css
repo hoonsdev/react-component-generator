@@ -268,6 +268,18 @@
   color: #6b6b6b;
 }
 
+.prompt-counter {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: right;
+}
+
+.prompt-counter-over {
+  color: var(--tomato);
+  font-weight: 700;
+}
+
 .prompt-error {
   margin-top: 10px;
   color: var(--tomato);
