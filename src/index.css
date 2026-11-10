@@ -1,0 +1,55 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  --desktop: #2f7f86;
+  --ink: #000000;
+  --paper: #ffffff;
+  --marigold: #ffc400;
+  --tomato: #e5483a;
+  --font-ui: 'Galmuri11', 'Galmuri9', 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --font-code: 'GalmuriMono11', 'Galmuri11', 'D2Coding', Consolas, monospace;
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  background-color: var(--desktop);
+  /* 2px 체커 디더링: 1-bit 데스크톱 질감 */
+  background-image: conic-gradient(
+    rgba(0, 0, 0, 0.16) 25%,
+    transparent 0 50%,
+    rgba(0, 0, 0, 0.16) 0 75%,
+    transparent 0
+  );
+  background-size: 4px 4px;
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--marigold);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
