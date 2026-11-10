@@ -26,7 +26,7 @@ React 19 + Vite 프론트엔드. 상태는 `useComponentGenerator` 훅과 `App.t
 
 ## Local Golden Rules
 
-- Test Boundary: 테스트는 `PromptInput`, `App`(영속화: 복원, Provider별 키 분리, 히스토리 기록), `utils/storage`에 있다. `useComponentGenerator`, `ComponentCard`, `LivePreview`, `CodeView`는 테스트가 없다. 이 파일을 수정하면 `bun run dev`로 생성, 에러, 재생성, 삭제 경로를 직접 확인한다.
+- Test Boundary: 테스트는 `PromptInput`, `App`(영속화: 복원, Provider별 키 분리, 히스토리 기록), `utils/storage`에 있다. `ComponentCard`(스트리밍 탭 전환), `utils/ndjson`, 훅의 스트리밍 경로(`App.test.tsx` 경유)도 테스트가 있다. `LivePreview`, `CodeView`는 테스트가 없다. 이 파일을 수정하면 `bun run dev`로 생성, 에러, 재생성, 삭제 경로를 직접 확인한다.
 - Test Boundary: `PromptInput.test.tsx`가 버튼 이름 `'컴포넌트 생성'`, `'생성 중...'`을 그대로 조회한다 (`src/components/PromptInput.test.tsx:8`, `src/components/PromptInput.test.tsx:25`). 이 문구(`src/components/PromptInput.tsx:241-243`)를 바꾸면 테스트도 같이 바꾼다.
 - Asymmetry: API 키 사전 검사는 `App.tsx`의 `handleGenerate`에만 있고 훅에는 없다 (`src/App.tsx:33-39`). 재생성도 `onRegenerate={handleGenerate}`를 거쳐야 검사가 적용된다 (`src/App.tsx:176`). 훅의 `generate`를 다른 경로에서 직접 호출하면 키 검사를 우회한다 (서버에도 같은 검사가 있다: `server/index.ts:169`).
 - Security Boundary: API 키는 사용자 요청에 따라 Provider별로 localStorage(`rcg:apiKey`)에 평문 저장된다 (`src/App.tsx`, `src/utils/storage.ts`). sessionStorage, URL, 로그에는 저장하지 않는다. Provider를 바꿔도 다른 Provider의 키가 전송되지 않도록 키를 Provider별로 분리한다. 키가 없으면 body에서 생략해 서버 `.env` 키를 쓰게 한다 (`src/hooks/useComponentGenerator.ts`).

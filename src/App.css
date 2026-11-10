@@ -575,6 +575,23 @@
   line-height: 1.75;
 }
 
+.code-block--streaming {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.code-block--streaming code::after {
+  content: '▋';
+  margin-left: 2px;
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 /* ── 반응형 ─────────────────────────────── */
 @media (max-width: 960px) {
   .workspace {
