@@ -1,5 +1,95 @@
 {
   "worktree": {
     "baseRef": "head"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/tdd-reminder.sh\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-test.sh\"",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.env)",
+      "Read(**/*credential*)",
+      "Read(**/*secret*)",
+      "Read(**/*.ini)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
+      "Read(**/.npmrc)",
+      "Read(**/.netrc)",
+      "Read(**/.aws/**)",
+      "Read(**/.ssh/**)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/*.env)",
+      "Edit(**/*credential*)",
+      "Edit(**/*secret*)",
+      "Edit(**/*.ini)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.p12)",
+      "Edit(**/*.pfx)",
+      "Edit(**/id_rsa*)",
+      "Edit(**/id_ed25519*)",
+      "Edit(**/.npmrc)",
+      "Edit(**/.netrc)",
+      "Edit(**/.aws/**)",
+      "Edit(**/.ssh/**)",
+      "Bash(cat *.env*)",
+      "Bash(cat *credential*)",
+      "Bash(cat *secret*)",
+      "Bash(cat *.ini*)",
+      "Bash(type *.env*)",
+      "Bash(type *credential*)",
+      "Bash(type *secret*)",
+      "Bash(type *.ini*)",
+      "Bash(head *.env*)",
+      "Bash(tail *.env*)",
+      "Bash(grep * *.env*)",
+      "Bash(rg * *.env*)",
+      "Bash(source *.env*)",
+      "Bash(cp *.env*)",
+      "Bash(mv *.env*)",
+      "Bash(rm *.env*)",
+      "Bash(printenv*)",
+      "Bash(env)",
+      "PowerShell(Get-Content *.env*)",
+      "PowerShell(Get-Content *credential*)",
+      "PowerShell(Get-Content *secret*)",
+      "PowerShell(Get-Content *.ini*)",
+      "PowerShell(gc *.env*)",
+      "PowerShell(type *.env*)",
+      "PowerShell(Select-String * *.env*)",
+      "PowerShell(Set-Content *.env*)",
+      "PowerShell(Add-Content *.env*)",
+      "PowerShell(Remove-Item *.env*)",
+      "PowerShell(Copy-Item *.env*)",
+      "PowerShell(Move-Item *.env*)"
+    ]
   }
 }
