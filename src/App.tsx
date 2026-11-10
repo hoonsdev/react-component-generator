@@ -3,6 +3,7 @@ import { PromptInput } from './components/PromptInput';
 import { ComponentCard } from './components/ComponentCard';
 import { useComponentGenerator } from './hooks/useComponentGenerator';
 import type { Provider } from './types';
+import { STORAGE_KEYS, loadValue, saveValue, addToHistory } from './utils/storage';
 import './App.css';
 
 const PROVIDER_CONFIG = {
@@ -10,10 +11,28 @@ const PROVIDER_CONFIG = {
   google: { label: 'Google', placeholder: 'AIza...' },
 } as const;
 
+const isProvider = (v: unknown): v is Provider => v === 'anthropic' || v === 'google';
+const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((item) => typeof item === 'string');
+const isKeyMap = (v: unknown): v is Partial<Record<Provider, string>> =>
+  typeof v === 'object' &&
+  v !== null &&
+  !Array.isArray(v) &&
+  Object.values(v).every((item) => typeof item === 'string');
+
 function App() {
-  const [apiKey, setApiKey] = useState('');
+  const [provider, setProvider] = useState<Provider>(() =>
+    loadValue<Provider>(STORAGE_KEYS.provider, 'google', isProvider),
+  );
+  // API 키는 Provider별로 저장해 다른 Provider로 키가 전송되지 않게 한다.
+  const [apiKeys, setApiKeys] = useState<Partial<Record<Provider, string>>>(() =>
+    loadValue(STORAGE_KEYS.apiKey, {}, isKeyMap),
+  );
+  const apiKey = apiKeys[provider] ?? '';
   const [showKey, setShowKey] = useState(false);
-  const [provider, setProvider] = useState<Provider>('google');
+  const [history, setHistory] = useState<string[]>(() =>
+    loadValue<string[]>(STORAGE_KEYS.history, [], isStringArray),
+  );
   const [envKeys, setEnvKeys] = useState<Record<Provider, boolean>>({
     anthropic: false,
     google: false,
@@ -28,19 +47,25 @@ function App() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => saveValue(STORAGE_KEYS.provider, provider), [provider]);
+  useEffect(() => saveValue(STORAGE_KEYS.apiKey, apiKeys), [apiKeys]);
+  useEffect(() => saveValue(STORAGE_KEYS.history, history), [history]);
+
   const hasEnvKey = envKeys[provider];
 
-  const handleGenerate = (prompt: string) => {
+  const handleGenerate = async (prompt: string) => {
     if (!apiKey.trim() && !hasEnvKey) {
       alert(`${PROVIDER_CONFIG[provider].label} API 키를 입력하거나 .env에 설정해주세요.`);
       return;
     }
-    generate(prompt, apiKey || undefined, provider);
+    // 성공한 프롬프트만 히스토리에 남긴다.
+    if (await generate(prompt, apiKey || undefined, provider)) {
+      setHistory((prev) => addToHistory(prev, prompt));
+    }
   };
 
   const handleProviderChange = (newProvider: Provider) => {
     setProvider(newProvider);
-    setApiKey('');
   };
 
   const activeProvider = PROVIDER_CONFIG[provider].label;
@@ -66,7 +91,7 @@ function App() {
             <span>새 컴포넌트</span>
           </div>
           <div className="win-body">
-            <PromptInput onGenerate={handleGenerate} isLoading={isLoading} />
+            <PromptInput onGenerate={handleGenerate} isLoading={isLoading} history={history} />
           </div>
         </section>
 
@@ -98,7 +123,7 @@ function App() {
                 id="api-key"
                 type={showKey ? 'text' : 'password'}
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={(e) => setApiKeys((prev) => ({ ...prev, [provider]: e.target.value }))}
                 placeholder={
                   hasEnvKey
                     ? '서버 키 사용 중 (직접 입력으로 덮어쓰기 가능)'

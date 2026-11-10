@@ -51,6 +51,20 @@ describe('PromptInput', () => {
     expect(onGenerate).not.toHaveBeenCalled();
   });
 
+  it('히스토리 항목을 클릭하면 입력창에 해당 프롬프트가 채워진다', async () => {
+    const user = userEvent.setup();
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={['이전 프롬프트']} />);
+
+    await user.click(screen.getByRole('button', { name: '이전 프롬프트' }));
+
+    expect(screen.getByRole('textbox')).toHaveValue('이전 프롬프트');
+  });
+
+  it('히스토리가 비어 있으면 최근 프롬프트 영역을 보여주지 않는다', () => {
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={[]} />);
+    expect(screen.queryByText('최근 프롬프트')).not.toBeInTheDocument();
+  });
+
   it('로딩 중에는 생성 버튼이 비활성이고 "생성 중..." 을 보여준다', () => {
     render(<PromptInput onGenerate={vi.fn()} isLoading={true} />);
     expect(screen.getByRole('button', { name: '생성 중...' })).toBeDisabled();
