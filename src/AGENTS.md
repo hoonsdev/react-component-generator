@@ -29,9 +29,9 @@ React 19 + Vite 프론트엔드. 상태는 `useComponentGenerator` 훅과 `App.t
 - Test Boundary: 테스트는 `PromptInput`뿐이다. `App`, `useComponentGenerator`, `ComponentCard`, `LivePreview`, `CodeView`는 테스트가 없다. 이 파일을 수정하면 `bun run dev`로 생성, 에러, 재생성, 삭제 경로를 직접 확인한다.
 - Test Boundary: `PromptInput.test.tsx`가 버튼 이름 `'컴포넌트 생성'`, `'생성 중...'`을 그대로 조회한다 (`src/components/PromptInput.test.tsx:8`, `src/components/PromptInput.test.tsx:25`). 이 문구(`src/components/PromptInput.tsx:241-243`)를 바꾸면 테스트도 같이 바꾼다.
 - Asymmetry: API 키 사전 검사는 `App.tsx`의 `handleGenerate`에만 있고 훅에는 없다 (`src/App.tsx:33-39`). 재생성도 `onRegenerate={handleGenerate}`를 거쳐야 검사가 적용된다 (`src/App.tsx:176`). 훅의 `generate`를 다른 경로에서 직접 호출하면 키 검사를 우회한다 (서버에도 같은 검사가 있다: `server/index.ts:169`).
-- Security Boundary: API 키는 `App.tsx`의 메모리 state에만 둔다. localStorage, sessionStorage, URL, 로그에 저장하지 않는다. 프로바이더를 바꾸면 입력 키를 비운다 (`src/App.tsx:41-44`). 키가 없으면 body에서 생략해 서버 `.env` 키를 쓰게 한다 (`src/hooks/useComponentGenerator.ts:26`).
+- Security Boundary: API 키는 사용자 요청에 따라 Provider별로 localStorage(`rcg:apiKey`)에 평문 저장된다 (`src/App.tsx`, `src/utils/storage.ts`). sessionStorage, URL, 로그에는 저장하지 않는다. Provider를 바꿔도 다른 Provider의 키가 전송되지 않도록 키를 Provider별로 분리한다. 키가 없으면 body에서 생략해 서버 `.env` 키를 쓰게 한다 (`src/hooks/useComponentGenerator.ts`).
 - Hard Constraint: `LivePreview`의 `noInline` 옵션을 제거하지 않는다 (`src/components/LivePreview.tsx:74`). 제거하면 서버가 보장하는 `render(...)` 호출 계약이 깨져 미리보기가 그려지지 않는다.
 - Hard Constraint: 미리보기 새로고침은 `key={previewKey}`로 `LivePreview`를 리마운트해 애니메이션을 다시 실행한다 (`src/components/ComponentCard.tsx:363`). 이 key를 제거하거나 고정하지 않는다.
-- Hard Constraint: `GeneratedComponent.createdAt`은 `Date` 객체이며 `toLocaleTimeString`을 직접 호출한다 (`src/components/ComponentCard.tsx:309`). 문자열로 직렬화하는 변경(예: 저장소 영속화)을 하면 함께 복원해야 한다.
+- Hard Constraint: `GeneratedComponent.createdAt`은 `Date` 객체이며 `toLocaleTimeString`을 직접 호출한다 (`src/components/ComponentCard.tsx:309`). localStorage 영속화로 문자열이 되므로 `loadComponents`(`src/utils/storage.ts`)가 `Date`로 복원한다. 저장 포맷을 바꾸면 함께 수정한다.
 - Hard Constraint: `eslint-plugin-react-refresh` 규칙 때문에 컴포넌트 파일에서는 컴포넌트 외 값을 export하지 않는다 (`eslint.config.js:396`). 상수와 헬퍼는 같은 파일 내부에 두거나 별도 모듈로 분리한다.
 - Do: 재생성은 기존 항목을 교체하지 않고 새 항목을 목록 맨 앞에 추가한다 (`src/hooks/useComponentGenerator.ts:42`). 의도된 동작이다.
