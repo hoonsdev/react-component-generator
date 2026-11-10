@@ -14,7 +14,7 @@
 
 ### Immutable
 
-- API 키를 코드, 로그, 커밋에 넣지 않는다. 키는 `.env`(gitignore 대상) 또는 요청 body로만 전달된다 (`server/index.ts:59-66`, `.gitignore`).
+- API 키를 코드, 로그, 커밋에 넣지 않는다. 서버 키는 `.env`(gitignore 대상)로만 전달된다. 사용자가 입력한 키는 요청 body로 전달되며, 클라이언트에서는 Provider별로 localStorage(`rcg:apiKey`)에 평문 저장된다 (`server/index.ts:59-66`, `src/AGENTS.md` Security Boundary 참조).
 - `/api/config`는 키 존재 여부(boolean)만 반환한다. 키 값을 클라이언트로 내려보내지 않는다 (`server/index.ts:147-156`).
 - Gemini 호출은 API 키가 URL 쿼리에 포함된다 (`server/index.ts:99`). 요청 URL을 로그나 에러 메시지에 포함하지 않는다 (현재 에러는 status 코드만 노출: `server/index.ts:112`).
 
@@ -28,7 +28,7 @@
 
 ### Test Boundary
 
-- 테스트 있음: `server/generator.ts`, `server/fallback.ts`, `src/components/PromptInput.tsx`.
+- 테스트 있음: `server/generator.ts`, `server/fallback.ts`, `src/components/PromptInput.tsx`, `src/App.tsx`(영속화 경로), `src/utils/storage.ts`.
 - 테스트 없음: `server/index.ts`(프로바이더 호출, 에러 매핑), `src/hooks/useComponentGenerator.ts`, `LivePreview`, `CodeView`, `ComponentCard`. 이 영역을 수정하면 수동으로 `bun run dev` 후 생성/에러 경로를 확인하거나 테스트를 추가한다.
 - 테스트는 대상 파일 옆에 `*.test.ts(x)`로 두고 한국어 `it` 설명을 쓴다 (`server/generator.test.ts`, `src/components/PromptInput.test.tsx`).
 

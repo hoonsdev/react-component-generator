@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const MAX_HISTORY = 20;
+export const MAX_COMPONENTS = 50;
 
 // 저장소 접근은 용량 초과, 사생활 보호 모드 등으로 실패할 수 있어 모두 조용히 처리한다.
 export function loadValue<T>(key: string, fallback: T, validate?: (v: unknown) => v is T): T {
@@ -49,7 +50,7 @@ export function loadComponents(): GeneratedComponent[] {
 }
 
 export function saveComponents(components: GeneratedComponent[]): void {
-  saveValue(STORAGE_KEYS.components, components);
+  saveValue(STORAGE_KEYS.components, components.slice(0, MAX_COMPONENTS));
 }
 
 export function addToHistory(history: string[], prompt: string): string[] {

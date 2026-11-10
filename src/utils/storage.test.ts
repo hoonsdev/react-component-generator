@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   STORAGE_KEYS,
   MAX_HISTORY,
+  MAX_COMPONENTS,
   loadValue,
   saveValue,
   loadComponents,
@@ -74,6 +75,14 @@ describe('loadComponents / saveComponents', () => {
   it('저장된 값이 배열이 아니면 빈 배열을 반환한다', () => {
     localStorage.setItem(STORAGE_KEYS.components, '{"a":1}');
     expect(loadComponents()).toEqual([]);
+  });
+
+  it(`최신 ${MAX_COMPONENTS}개만 저장한다 (목록은 최신순)`, () => {
+    const many = Array.from({ length: MAX_COMPONENTS + 5 }, (_, i) => ({ ...sample, id: String(i) }));
+    saveComponents(many);
+    const restored = loadComponents();
+    expect(restored).toHaveLength(MAX_COMPONENTS);
+    expect(restored[0].id).toBe('0');
   });
 
   it('날짜가 유효하지 않은 항목은 걸러낸다', () => {

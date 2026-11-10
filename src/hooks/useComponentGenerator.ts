@@ -6,7 +6,7 @@ interface UseComponentGeneratorReturn {
   components: GeneratedComponent[];
   isLoading: boolean;
   error: string | null;
-  generate: (prompt: string, apiKey: string | undefined, provider: Provider) => Promise<void>;
+  generate: (prompt: string, apiKey: string | undefined, provider: Provider) => Promise<boolean>;
   removeComponent: (id: string) => void;
   clearAll: () => void;
 }
@@ -45,9 +45,11 @@ export function useComponentGenerator(): UseComponentGeneratorReturn {
       };
 
       setComponents((prev) => [newComponent, ...prev]);
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
+      return false;
     } finally {
       setIsLoading(false);
     }

@@ -15,7 +15,10 @@ const isProvider = (v: unknown): v is Provider => v === 'anthropic' || v === 'go
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((item) => typeof item === 'string');
 const isKeyMap = (v: unknown): v is Partial<Record<Provider, string>> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
+  typeof v === 'object' &&
+  v !== null &&
+  !Array.isArray(v) &&
+  Object.values(v).every((item) => typeof item === 'string');
 
 function App() {
   const [provider, setProvider] = useState<Provider>(() =>
@@ -50,13 +53,15 @@ function App() {
 
   const hasEnvKey = envKeys[provider];
 
-  const handleGenerate = (prompt: string) => {
+  const handleGenerate = async (prompt: string) => {
     if (!apiKey.trim() && !hasEnvKey) {
       alert(`${PROVIDER_CONFIG[provider].label} API 키를 입력하거나 .env에 설정해주세요.`);
       return;
     }
-    setHistory((prev) => addToHistory(prev, prompt));
-    generate(prompt, apiKey || undefined, provider);
+    // 성공한 프롬프트만 히스토리에 남긴다.
+    if (await generate(prompt, apiKey || undefined, provider)) {
+      setHistory((prev) => addToHistory(prev, prompt));
+    }
   };
 
   const handleProviderChange = (newProvider: Provider) => {
